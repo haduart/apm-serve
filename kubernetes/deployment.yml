@@ -1,0 +1,243 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "production"
+  labels:
+    zone: "production"
+    name: "production"
+
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: apm-secrets
+  namespace: "production"
+data:
+  APMSERVE_STAGING_ENS: "MHhmZTAzNjI1ZWE4ODBhOGNiYTMzNmY5YjVhZDZlMTViMGEzYjVhOTM5"
+  APMSERVE_RINKEBY-OLD_ENS: "MHhmYkFFMzJEMWNERTYyODU4YkM0NWY1MWVGQzhDYzRGYTE0MTU0NDdF"
+  APMSERVE_RINKEBY_ENS: "MHg5OERmMjg3QjZDMTQ1Mzk5QWFhNzA5NjkyYzhEMzA4MzU3YkMwODVE"
+  APMSERVE_MAINNET_ENS: "MHgzMTQxNTkyNjVkRDhkYmIzMTA2NDJmOThmNTBDMDY2MTczQzEyNTli"
+
+---
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "apm-server-config"
+  namespace: "production"
+  labels:
+    zone: "production"
+    name: "apm-backend"
+data:
+  HOST: "aragonpm.com"
+  APMSERVE_HOST: "aragonpm.com"
+  APMSERVE_APM: "aragonpm.eth"
+  APMSERVE_ALIASES: '[{"alias": "rinkeby.aragon.org", "target":"aragon.rinkeby"}, {"alias": "mainnet.aragon.org", "target":"aragon.mainnet"}]'
+  APMSERVE_IPFS: "https://ipfs.eth.aragon.network/ipfs"
+  APMSERVE_NETWORKS: '[{"network": "mainnet"}, {"network": "staging"}, {"network": "rinkeby-old"}, {"network": "rinkeby-new"}, {"network":"rinkeby"}]'
+  APMSERVE_STAGING_ETH: "https://rinkeby.eth.aragon.network"
+  APMSERVE_RINKEBY-OLD_ETH: "https://rinkeby.eth.aragon.network"
+  APMSERVE_RINKEBY_ETH: "https://rinkeby.eth.aragon.network"
+  APMSERVE_MAINNET_ETH: "https://mainnet.eth.aragon.network"
+  PORT: "3000"
+  METRICS_PORT: "3001"
+
+---
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "apm-server-deployment"
+  namespace: "production"
+  labels:
+    zone: "production"
+    name: "apm-backend"
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 300
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      zone: "production"
+      name: "apm-backend"
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        zone: "production"
+        name: "apm-backend"
+    spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: "apm-backend-service"
+          image: "aragon/apm-serve:latest"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: "PORT"
+              valueFrom:
+                configMapKeyRef:
+                  key: "PORT"
+                  name: "apm-server-config"
+            - name: "METRICS_PORT"
+              valueFrom:
+                configMapKeyRef:
+                  key: "METRICS_PORT"
+                  name: "apm-server-config"
+            - name: "HOST"
+              valueFrom:
+                configMapKeyRef:
+                  key: "HOST"
+                  name: "apm-server-config"
+            - name: "APMSERVE_HOST"
+              valueFrom:
+                configMapKeyRef:
+                  key: "APMSERVE_HOST"
+                  name: "apm-server-config"
+            - name: "APMSERVE_APM"
+              valueFrom:
+                configMapKeyRef:
+                  key: "APMSERVE_APM"
+                  name: "apm-server-config"
+            - name: "APMSERVE_ALIASES"
+              valueFrom:
+                configMapKeyRef:
+                  key: "APMSERVE_ALIASES"
+                  name: "apm-server-config"
+            - name: "APMSERVE_IPFS"
+              valueFrom:
+                configMapKeyRef:
+                  key: "APMSERVE_IPFS"
+                  name: "apm-server-config"
+            - name: "APMSERVE_NETWORKS"
+              valueFrom:
+                configMapKeyRef:
+                  key: "APMSERVE_NETWORKS"
+                  name: "apm-server-config"
+            - name: "APMSERVE_STAGING_ETH"
+              valueFrom:
+                configMapKeyRef:
+                  key: "APMSERVE_STAGING_ETH"
+                  name: "apm-server-config"
+            - name: "APMSERVE_RINKEBY-OLD_ETH"
+              valueFrom:
+                configMapKeyRef:
+                  key: "APMSERVE_RINKEBY-OLD_ETH"
+                  name: "apm-server-config"
+            - name: "APMSERVE_RINKEBY_ETH"
+              valueFrom:
+                configMapKeyRef:
+                  key: "APMSERVE_RINKEBY_ETH"
+                  name: "apm-server-config"
+            - name: "APMSERVE_MAINNET_ETH"
+              valueFrom:
+                configMapKeyRef:
+                  key: "APMSERVE_MAINNET_ETH"
+                  name: "apm-server-config"
+            - name: "APMSERVE_STAGING_ENS"
+              valueFrom:
+                secretKeyRef:
+                  key: "APMSERVE_STAGING_ENS"
+                  name: "apm-secrets"
+            - name: "APMSERVE_RINKEBY-OLD_ENS"
+              valueFrom:
+                secretKeyRef:
+                  key: "APMSERVE_RINKEBY-OLD_ENS"
+                  name: "apm-secrets"
+            - name: "APMSERVE_RINKEBY_ENS"
+              valueFrom:
+                secretKeyRef:
+                  key: "APMSERVE_RINKEBY_ENS"
+                  name: "apm-secrets"
+            - name: "APMSERVE_MAINNET_ENS"
+              valueFrom:
+                secretKeyRef:
+                  key: "APMSERVE_MAINNET_ENS"
+                  name: "apm-secrets"
+
+---
+apiVersion: "autoscaling/v2beta1"
+kind: "HorizontalPodAutoscaler"
+metadata:
+  name: "apm-backend-service-hpa"
+  namespace: "production"
+  labels:
+    zone: "production"
+    name: "apm-backend"
+spec:
+  scaleTargetRef:
+    kind: "Deployment"
+    name: "apm-server-deployment"
+    apiVersion: "apps/v1"
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: "Resource"
+      resource:
+        name: "cpu"
+        targetAverageUtilization: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apm-backend-service-svc
+  namespace: "production"
+  labels:
+    name: "apm-backend"
+    zone: "production"
+spec:
+  type: NodePort
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    name: "apm-backend"
+    zone: "production"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apm-backend-metrics
+  namespace: "production"
+  labels:
+    name: "apm-backend"
+    zone: "production"
+spec:
+  type: NodePort
+  ports:
+    - port: 3001
+      targetPort: 3001
+      protocol: TCP
+  selector:
+    name: "apm-backend"
+    zone: "production"
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: apm-ingress
+  namespace: "production"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - host: hello-world.info
+      http:
+        paths:
+          - path: /prometeus
+            backend:
+              serviceName: apm-backend-metrics
+              servicePort: 3001
+          - path: /*
+            backend:
+              serviceName: apm-backend-service-svc
+              servicePort: 3000
+
+
