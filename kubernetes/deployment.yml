@@ -231,7 +231,7 @@ spec:
     - host: hello-world.info
       http:
         paths:
-          - path: /prometeus
+          - path: /prometheus
             backend:
               serviceName: apm-backend-metrics
               servicePort: 3001

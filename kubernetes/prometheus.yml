@@ -1,0 +1,193 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config-file
+  namespace: monitoring
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |-
+    # my global config
+    global:
+      scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+      evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+      # scrape_timeout is set to the global default (10s).
+
+      # Attach these labels to any time series or alerts when communicating with
+      # external systems (federation, remote storage, Alertmanager).
+      external_labels:
+          monitor: 'codelab-monitor'
+
+    # Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+    rule_files:
+      # - "first.rules"
+      # - "second.rules"
+
+    # A scrape configuration containing exactly one endpoint to scrape:
+    # Here it's Prometheus itself.
+    scrape_configs:
+      # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+      - job_name: 'prometheus'
+
+        # metrics_path defaults to '/metrics'
+        # scheme defaults to 'http'.
+
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'minikube'
+        metrics_path:  '/prometheus'
+        # scheme defaults to 'http'.
+
+        static_configs:
+          - targets: ['hello-world.info']
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config-flags
+  namespace: monitoring
+  labels:
+    app: prometheus
+data:
+  # Check "prometheus --help" for more flags
+  STORAGE_LOCAL_RETENTION: 168h0m0s
+  STORAGE_LOCAL_TARGET_HEAP_SIZE: '536870912'
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-storage
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-svc
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  type: NodePort
+  selector:
+    app: prometheus
+  ports:
+    - name: prometheus
+      protocol: TCP
+      port: 9090
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - image: quay.io/prometheus/prometheus:v1.7.1
+          name: prom
+          args:
+            - '-config.file=/prometheus-cfg/prometheus.yml'
+            - '-storage.local.path=/data'
+            - '-storage.local.retention=$(STORAGE_LOCAL_RETENTION)'
+            - '-storage.local.target-heap-size=$(STORAGE_LOCAL_TARGET_HEAP_SIZE)'
+          envFrom:
+            - configMapRef:
+                name: prometheus-config-flags
+          ports:
+            - containerPort: 9090
+              name: prom-port
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 200m
+              memory: 1Gi
+          volumeMounts:
+            - name: config-file
+              mountPath: /prometheus-cfg
+            - name: storage
+              mountPath: /data
+      volumes:
+        - name: config-file
+          configMap:
+            name: prometheus-config-file
+        - name: storage
+          persistentVolumeClaim:
+            claimName: prometheus-storage
+  selector:
+    matchLabels:
+      app: "prometheus"
+
